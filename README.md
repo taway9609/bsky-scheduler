@@ -1,6 +1,8 @@
 # Bluesky Scheduler
 
 FastAPIベースのBluesky投稿スケジュール管理アプリケーション。
+Kilo Code, Opencode, Claude CodeのエージェントAIにより作られたプログラムです。
+テストなどは実施していますが予期せぬバグが起こる場合があります。ご了承ください。
 
 ## 概要
 
