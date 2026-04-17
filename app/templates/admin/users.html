@@ -1,0 +1,124 @@
+{% extends "admin/_base.html" %}
+{% set active_page = 'users' %}
+
+{% block title %}ユーザー管理{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex justify-content-between align-items-center">
+    <h2 class="page-title"><i class="fas fa-users me-2"></i>ユーザー管理</h2>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary" onclick="loadUsers()">
+            <i class="fas fa-sync-alt me-2"></i>更新
+        </button>
+        <button class="btn btn-danger" id="bulk-delete-btn" onclick="bulkDeleteUsers()" style="display: none;">
+            <i class="fas fa-trash me-2"></i>一括削除 (<span id="selected-count">0</span>)
+        </button>
+    </div>
+</div>
+
+<!-- Mobile bulk select FAB -->
+<div class="mobile-bulk-actions d-md-none">
+    <button class="btn btn-primary mobile-select-all-btn" id="mobile-select-all-btn" onclick="toggleMobileSelectAll()">
+        <i class="fas fa-check-square me-2"></i><span id="mobile-select-text">すべて選択</span>
+    </button>
+</div>
+
+<div class="admin-card">
+    <div class="table-responsive">
+        <table class="table table-hover table-checkbox users-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">
+                        <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
+                    </th>
+                    <th style="width: 50px;"></th>
+                    <th>ユーザー名</th>
+                    <th>ステータス</th>
+                    <th>権限</th>
+                    <th>Bluesky アカウント</th>
+                    <th>投稿数</th>
+                    <th>登録日</th>
+                    <th style="width: 200px;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="users-tbody">
+                <tr>
+                    <td colspan="9" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">読み込み中...</span>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+        <div>
+            <span id="pagination-info">全 <span id="total-users">0</span> 件</span>
+        </div>
+        <nav>
+            <ul class="pagination pagination-sm mb-0" id="pagination">
+            </ul>
+        </nav>
+    </div>
+</div>
+
+<div class="modal fade" id="userDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-user me-2"></i>ユーザー詳細</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="userDetailContent">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">読み込み中...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="passwordResetModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-key me-2"></i>パスワードリセット</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>パスワードをリセットすると、新しい一時パスワードが生成されます。</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    新しいパスワードはユーザーに伝えてください。
+                </div>
+                <div id="tempPasswordDisplay" style="display: none;">
+                    <label>一時パスワード:</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="tempPassword" readonly>
+                        <button class="btn btn-outline-secondary" onclick="copyPassword()">
+                            <i class="fas fa-copy"></i> コピー
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="confirmResetPassword" onclick="confirmPasswordReset()">
+                    <i class="fas fa-key me-2"></i>リセットする
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<input type="hidden" id="admin-token" data-access-token="{{ access_token | default('') }}">
+<script src="/static/js/admin/users.js?v=1"></script>
+{% endblock %}

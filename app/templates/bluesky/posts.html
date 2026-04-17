@@ -1,0 +1,59 @@
+<!-- 予約投稿一覧セクション -->
+<section id="posts-section" class="content-section active">
+    <div class="section-header mb-4">
+        <h2>予約投稿一覧</h2>
+        <div class="section-header-actions">
+            <button id="refresh-posts-btn" class="btn btn-secondary">
+                <i class="fas fa-sync-alt"></i> 予約一覧を更新
+            </button>
+            <button class="btn btn-primary" id="new-post-btn">
+                <i class="fas fa-calendar-plus"></i> 新規投稿
+            </button>
+        </div>
+    </div>
+
+    <div class="search-and-filter-container">
+        <div class="search-container">
+            <div class="account-filter-container">
+                <i class="fas fa-user"></i>
+                <select id="account-filter-select" class="form-control"></select>
+            </div>
+            <div class="content-search-container">
+                <i class="fas fa-search"></i>
+                <input type="search" id="search-input" class="form-control" placeholder="投稿内容で検索...">
+            </div>
+        </div>
+        <div class="filter-container">
+            <span class="filter-label"><i class="fas fa-filter"></i> ステータス:</span>
+            <button class="btn btn-sm btn-filter active" data-status-filter="all">すべて</button>
+            <button class="btn btn-sm btn-filter" data-status-filter="pending">予約済み</button>
+            <button class="btn btn-sm btn-filter" data-status-filter="posted">投稿済み</button>
+            <button class="btn btn-sm btn-filter" data-status-filter="failed">失敗</button>
+            <button class="btn btn-sm btn-filter" data-status-filter="editing">編集中</button>
+        </div>
+        <div class="filter-container" style="margin-top: 0.75rem;">
+            <span class="filter-label"><i class="fas fa-sort"></i> 並び替え:</span>
+            <select id="sort-select" class="form-control" style="max-width: 200px; padding: 0.375rem 0.75rem;">
+                <option value="created_at-desc">予約登録 (新しい順)</option>
+                <option value="created_at-asc">予約登録 (古い順)</option>
+                <option value="schedule_time-desc">予約日時 (新しい順)</option>
+                <option value="schedule_time-asc">予約日時 (古い順)</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="bulk-actions-container" style="margin-bottom: 1rem; padding: 1rem; background-color: var(--surface-color); border-radius: var(--border-radius); box-shadow: var(--shadow);">
+        <button id="delete-selected-btn" class="btn btn-danger btn-sm" disabled>
+            <i class="fas fa-trash-alt"></i> 選択した <span id="selected-posts-count">0</span> 件を削除
+        </button>
+        <button id="select-all-posts-btn" class="btn btn-outline btn-sm" style="margin-left: 0.5rem;">
+            <i class="fas fa-check-double"></i> すべて選択
+        </button>
+        <button id="deselect-all-posts-btn" class="btn btn-outline btn-sm" style="margin-left: 0.5rem; display:none;">
+            <i class="fas fa-times"></i> すべて選択解除
+        </button>
+    </div>
+
+  <div class="posts-container">
+  </div>
+</section>

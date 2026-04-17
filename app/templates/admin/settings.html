@@ -1,0 +1,42 @@
+{% extends "admin/_base.html" %}
+{% set active_page = 'settings' %}
+
+{% block title %}アプリ設定{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="page-title"><i class="fas fa-cog me-2"></i>アプリ設定</h2>
+</div>
+
+<div class="admin-card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-user-plus me-2"></i>ユーザー登録設定</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="mb-3">
+                    <h6>新規アカウント登録</h6>
+                    <p class="text-muted small">無効にすると、新しいユーザーのアカウント作成が停止されます。管理者は引き続きログインできます。</p>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="registration-enabled" onchange="toggleRegistration()">
+                    <label class="form-check-label" for="registration-enabled">
+                        <span id="registration-status-text">読み込み中...</span>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-4 text-end">
+                <button class="btn btn-primary" onclick="saveSettings()" id="save-btn" disabled>
+                    <i class="fas fa-save me-1"></i>設定を保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<input type="hidden" id="admin-token" data-access-token="{{ access_token | default('') }}">
+<script src="/static/js/admin/settings.js?v=1"></script>
+{% endblock %}

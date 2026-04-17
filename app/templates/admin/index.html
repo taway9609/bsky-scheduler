@@ -1,0 +1,185 @@
+{% extends "admin/_base.html" %}
+{% set active_page = 'dashboard' %}
+
+{% block title %}ダッシュボード{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="page-title"><i class="fas fa-tachometer-alt me-2"></i>ダッシュボード</h2>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-4 col-sm-6 col-6">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="stat-number" id="stat-users">-</div>
+                    <div class="stat-label">ユーザー数</div>
+                </div>
+                <i class="fas fa-users stat-icon"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-4 col-sm-6 col-6">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="stat-number" id="stat-accounts">-</div>
+                    <div class="stat-label">Blueskyアカウント</div>
+                </div>
+                <i class="fab fa-blogger-b stat-icon"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-4 col-sm-6 col-6">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="stat-number" id="stat-posts">-</div>
+                    <div class="stat-label">総投稿数</div>
+                </div>
+                <i class="fas fa-calendar-check stat-icon"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-4 col-sm-6 col-6">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="stat-number" id="stat-pending">-</div>
+                    <div class="stat-label">予約待ち</div>
+                </div>
+                <i class="fas fa-clock stat-icon"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-4 col-md-4 col-sm-6 col-6">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="stat-number" id="stat-posted">-</div>
+                    <div class="stat-label">投稿済み</div>
+                </div>
+                <i class="fas fa-check-circle stat-icon" style="color: #3fb950;"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 col-md-4 col-sm-6 col-6">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="stat-number" id="stat-failed">-</div>
+                    <div class="stat-label">失敗</div>
+                </div>
+                <i class="fas fa-exclamation-circle stat-icon" style="color: #f85149;"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 col-md-4 col-sm-6 col-6">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="stat-number" id="stat-active-users">-</div>
+                    <div class="stat-label">アクティブユーザー</div>
+                </div>
+                <i class="fas fa-user-check stat-icon" style="color: #3fb950;"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="admin-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>エラー Logs</h5>
+        <div>
+            <a href="/admin/error-logs" class="btn btn-sm btn-light">
+                <i class="fas fa-external-link-alt me-1"></i>詳細
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="error-stat">
+                    <div class="error-stat-number" id="stat-error-total">-</div>
+                    <div class="error-stat-label">総エラー数</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="error-stat">
+                    <div class="error-stat-number text-danger" id="stat-error-unresolved">-</div>
+                    <div class="error-stat-label">未解決</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="error-stat">
+                    <div class="error-stat-number text-success" id="stat-error-resolved">-</div>
+                    <div class="error-stat-label">解決済み</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="admin-card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>クイックアクション</h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-lg-3 col-md-6 col-sm-6">
+                <a href="/admin/users" class="quick-action-card">
+                    <div class="quick-action-icon bg-primary">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="quick-action-text">
+                        <h6>ユーザー管理</h6>
+                        <small>ユーザーの追加・編集・削除</small>
+                    </div>
+                </a>
+            </div>
+            <div class="col-lg-3 col-md-6 col-sm-6">
+                <a href="/bluesky/scheduler" class="quick-action-card">
+                    <div class="quick-action-icon bg-info">
+                        <i class="fas fa-calendar-alt"></i>
+                    </div>
+                    <div class="quick-action-text">
+                        <h6>スケジューラー</h6>
+                        <small>投稿の確認与管理</small>
+                    </div>
+                </a>
+            </div>
+            <div class="col-lg-3 col-md-6 col-sm-6">
+                <a href="/bluesky/accounts" class="quick-action-card">
+                    <div class="quick-action-icon" style="background: #6f42c1;">
+                        <i class="fab fa-bluesky"></i>
+                    </div>
+                    <div class="quick-action-text">
+                        <h6>Bluesky アカウント</h6>
+                        <small>アカウント追加・設定</small>
+                    </div>
+                </a>
+            </div>
+            <div class="col-lg-3 col-md-6 col-sm-6">
+                <a href="/admin/error-logs" class="quick-action-card">
+                    <div class="quick-action-icon" style="background: #dc3545;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="quick-action-text">
+                        <h6>エラーログ</h6>
+                        <small>エラー確認・管理</small>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<input type="hidden" id="dashboard-data" data-access-token="{{ access_token | default('') }}">
+<script src="/static/js/admin/dashboard.js?v=1"></script>
+{% endblock %}

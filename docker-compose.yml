@@ -1,0 +1,99 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${DB_USER:-bluesky}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-bluesky}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-bluesky}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build: .
+    entrypoint: /bin/bash /app/docker-entrypoint.sh
+    command: /app/start.sh
+    ports:
+      - "6969:6969"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      SERVICE_NAME: app
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-bluesky}
+      DB_USER: ${DB_USER:-bluesky}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_FOLDER: /app/uploads
+      IMAGE_FOLDER: /app/app/static/images
+      USE_MOCK_BLUESKY: "false"
+      IS_DEV: "false"
+      LOG_LEVEL: "DEBUG"
+    volumes:
+      - uploads:/app/uploads
+      - ./app/static/images:/app/app/static/images
+      - app_env:/app/env
+
+  app-dev:
+    build:
+      context: .
+    command: sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload & rq worker --with-scheduler scheduler_queue"
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      SERVICE_NAME: app
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: bluesky
+      DB_USER: bluesky
+      DB_PASSWORD: changeme
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-9tM_MbOrnpqGeSDulaU7NwoUeKtPPMGNt1LHxJ4LaZ4=}
+      UPLOAD_FOLDER: /app/uploads
+      IMAGE_FOLDER: /app/app/static/images
+      USE_MOCK_BLUESKY: "true"
+      LOG_LEVEL: "DEBUG"
+      IS_DEV: "true"
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  uploads:
+  app_env:

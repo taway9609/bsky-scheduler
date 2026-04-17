@@ -1,0 +1,273 @@
+/* Toast Notification Styles */
+
+/* Container for all toast notifications */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: 400px;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* Responsive positioning for mobile */
+@media (max-width: 768px) {
+  .toast-container {
+    top: 20px;
+    left: 20px;
+    right: auto;
+    align-items: flex-start;
+  }
+}
+
+/* Base toast styles */
+.toast {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid transparent;
+  position: relative;
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: all;
+  min-width: 280px;
+}
+
+/* Dark mode styles */
+body.dark-mode .toast {
+  background: rgba(30, 39, 50, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  color: #f7f9f9;
+}
+
+/* Toast entrance animation */
+.toast-enter {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Toast exit animation */
+.toast-exit {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+/* Toast content layout */
+.toast-content {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 10px;
+}
+
+/* Toast icon styling */
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Dark mode icon styling */
+body.dark-mode .toast-icon {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Toast text styling */
+.toast-text {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text-primary);
+  word-wrap: break-word;
+}
+
+/* Dark mode text styling */
+body.dark-mode .toast-text {
+  color: #f7f9f9;
+}
+
+/* Toast close button */
+.toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  margin-left: 8px;
+  border-radius: 50%;
+  opacity: 0.7;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+/* Dark mode close button */
+body.dark-mode .toast-close {
+  color: var(--text-secondary);
+}
+
+/* Close button hover state */
+.toast-close:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.1);
+  transform: scale(1.1);
+}
+
+/* Dark mode close button hover */
+body.dark-mode .toast-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Progress bar */
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+  border-radius: 0 0 16px 16px;
+  opacity: 0.7;
+}
+
+/* Dark mode progress bar */
+body.dark-mode .toast-progress {
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+}
+
+/* Toast color variations */
+.toast-success {
+  border-left-color: var(--success-color);
+}
+
+.toast-error,
+.toast-danger {
+  border-left-color: var(--danger-color);
+}
+
+.toast-warning {
+  border-left-color: var(--warning-color);
+}
+
+.toast-info {
+  border-left-color: var(--primary-color);
+}
+
+/* Dark mode color variations */
+body.dark-mode .toast-success {
+  border-left-color: var(--success-color);
+}
+
+body.dark-mode .toast-error,
+body.dark-mode .toast-danger {
+  border-left-color: var(--danger-color);
+}
+
+body.dark-mode .toast-warning {
+  border-left-color: var(--warning-color);
+}
+
+body.dark-mode .toast-info {
+  border-left-color: var(--primary-color);
+}
+
+/* Add subtle gradient to background for depth */
+.toast::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.1) 100%);
+  pointer-events: none;
+}
+
+/* Dark mode gradient */
+body.dark-mode .toast::after {
+  background: linear-gradient(180deg, rgba(30, 39, 50, 0) 0%, rgba(255, 255, 255, 0.05) 100%);
+}
+
+/* Add subtle animation to icons when toast appears */
+.toast-icon svg {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-enter .toast-icon svg {
+  transform: scale(1.1);
+}
+
+.toast-exit .toast-icon svg {
+  transform: scale(0.8);
+}
+
+/* Add subtle glow to icons on hover */
+.toast:hover .toast-icon svg {
+  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.1));
+}
+
+body.dark-mode .toast:hover .toast-icon svg {
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.2));
+}
+
+/* Ensure icons are properly sized */
+.toast-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2px;
+}
+
+/* Add a subtle scale effect when toast is hovered */
+.toast:hover {
+  transform: scale(1.02);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+}
+
+body.dark-mode .toast:hover {
+  transform: scale(1.02);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* Add a subtle glow to the toast container for depth */
+.toast-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.05) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+body.dark-mode .toast-container::before {
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.2) 0%, transparent 60%);
+}

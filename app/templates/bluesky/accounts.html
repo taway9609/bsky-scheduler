@@ -1,0 +1,254 @@
+<!-- アカウント管理セクション -->
+<section id="account-section" class="content-section">
+    <div class="section-header">
+        <h2>アカウント管理</h2>
+        <div class="account-header-actions">
+            <button class="btn btn-primary" id="show-add-account-modal-btn">
+                <i class="fas fa-plus"></i>アカウント追加
+            </button>
+        </div>
+    </div>
+
+    <div class="account-management">
+
+        <!-- アカウント統計 -->
+        <div class="account-stats-section" id="account-stats-section" style="display: none;">
+            <h4>アカウント統計</h4>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="account-scheduled-posts">
+                        {% if scheduled_posts %}
+                            {% set account_posts = scheduled_posts.values() | selectattr('account', 'equalto', 'PLACEHOLDER') | list %}
+                            {{ account_posts | length }}
+                        {% else %}
+                            0
+                        {% endif %}
+                    </div>
+                    <div class="stat-label">予約投稿</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="account-posted-count">
+                        {% if scheduled_posts %}
+                            {% set posted_posts = scheduled_posts.values() | selectattr('status', 'equalto', 'posted') | selectattr('account', 'equalto', 'PLACEHOLDER') | list %}
+                            {{ posted_posts | length }}
+                        {% else %}
+                            0
+                        {% endif %}
+                    </div>
+                    <div class="stat-label">投稿済み</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="account-failed-count">
+                        {% if scheduled_posts %}
+                            {% set failed_posts = scheduled_posts.values() | selectattr('status', 'equalto', 'failed') | selectattr('account', 'equalto', 'PLACEHOLDER') | list %}
+                            {{ failed_posts | length }}
+                        {% else %}
+                            0
+                        {% endif %}
+                    </div>
+                    <div class="stat-label">失敗</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="account-last-post">-</div>
+                    <div class="stat-label">最終投稿</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- アカウント一覧カード -->
+        <div class="accounts-table-section">
+            <h4>登録アカウント一覧</h4>
+            {% if accounts and accounts|length > 0 %}
+            <div class="accounts-grid">
+                {% for username, account_data in accounts.items() %}
+                <div class="account-card">
+                    <div class="account-card-header">
+                        <div class="account-card-icon">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <div class="account-card-info">
+                            <div class="account-card-name">
+                                {% if account_data.display_name %}
+                                    {{ account_data.display_name }}
+                                {% endif %}
+                            </div>
+                            <div class="account-card-username">@{{ username }}</div>
+                        </div>
+                    </div>
+                    <div class="account-card-body">
+                        <div class="account-card-did">
+                            <small class="text-muted">DID</small>
+                            <code>{{ account_data.did[:30] }}...</code>
+                        </div>
+                        <div class="account-card-stats">
+                            <div class="account-card-stat">
+                                <span class="stat-value">
+                                    {% if scheduled_posts %}
+                                        {% set account_posts = scheduled_posts.values() | selectattr('account', 'equalto', username) | list %}
+                                        {{ account_posts | length }}
+                                    {% else %}
+                                        0
+                                    {% endif %}
+                                </span>
+                                <span class="stat-label">投稿</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="account-card-footer">
+                        <button class="btn btn-sm btn-outline edit-account-btn" data-username="{{ username }}">
+                            <i class="fas fa-edit"></i> 編集
+                        </button>
+                        <button class="btn btn-sm btn-secondary sync-account-btn" data-did="{{ account_data.did }}" title="Blueskyから表示名を更新">
+                            <i class="fas fa-sync"></i> 更新
+                        </button>
+                        <button class="btn btn-sm btn-danger delete-account-btn" data-did="{{ account_data.did }}">
+                            <i class="fas fa-trash"></i> 削除
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="no-accounts">
+                <i class="fas fa-user-slash"></i>
+                <h3>登録されたアカウントがありません</h3>
+                <p>新しいアカウントを追加してください</p>
+                <button class="btn btn-primary" id="show-add-account-modal-btn-empty">
+                    <i class="fas fa-plus"></i>アカウントを追加
+                </button>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+</section>
+
+<!-- アカウント追加モーダル -->
+<div id="add-account-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>アカウント追加</h3>
+            <button class="modal-close" id="close-add-account-modal-btn">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form id="add-account-form">
+                <div class="form-group">
+                    <label for="new-account-username">ユーザー名</label>
+                    <input type="text" id="new-account-username" name="identifier" placeholder="example.bsky.social" required>
+                    <small>BlueSky のユーザー名（DID）を入力してください</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="new-account-password">パスワード</label>
+                    <input type="password" id="new-account-password" name="password" placeholder="BlueSky のパスワード" required>
+                    <small>BlueSky アカウントのパスワードを入力してください</small>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-add-account-btn">
+                        キャンセル
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>アカウント追加
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- アカウント編集モーダル -->
+<div id="edit-account-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>アカウント編集</h3>
+            <button class="modal-close" id="close-edit-account-modal-btn">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form id="edit-account-form">
+
+                <div class="form-group">
+                    <label for="edit-account-username-display">ユーザー名</label>
+                    <input type="text" id="edit-account-username-display" readonly>
+                    <small>ユーザー名は自動取得されます</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit-account-did">DID</label>
+                    <input type="text" id="edit-account-did" name="identifier" readonly>
+                    <small>DID は変更できません</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit-account-password">パスワード</label>
+                    <input type="password" id="edit-account-password" name="password" placeholder="変更する場合のみ入力">
+                    <small>変更しない場合は空のままにしてください</small>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-edit-account-btn">
+                        キャンセル
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>保存
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript でアカウントデータを利用可能にする -->
+<script>
+    window.accountsData = {{ accounts | tojson | safe }};
+    window.appSettings = {{ app_settings | tojson | safe }};
+</script>
+
+<!-- jQueryイベントハンドラ -->
+<script src="{{ url_for('static', filename='js/bluesky/event-handlers.js') }}"></script>
+
+<!-- Custom Confirm Modal -->
+<div id="custom-confirm-modal" class="custom-modal-overlay">
+    <div class="custom-modal-content">
+        <div class="custom-modal-header">
+            <h3 id="custom-confirm-title">確認</h3>
+            <button type="button" class="custom-modal-close" id="custom-confirm-close-btn" aria-label="閉じる">&times;</button>
+        </div>
+        <div class="custom-modal-body">
+            <p id="custom-confirm-message"></p>
+        </div>
+        <div class="custom-modal-footer">
+            <button type="button" class="btn btn-secondary" id="custom-confirm-cancel-btn">キャンセル</button>
+            <button type="button" class="btn btn-primary" id="custom-confirm-ok-btn">OK</button>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Alert Modal -->
+<div id="custom-alert-modal" class="custom-modal-overlay">
+    <div class="custom-modal-content">
+        <div class="custom-modal-header">
+            <h3 id="custom-alert-title">通知</h3>
+            <button type="button" class="custom-modal-close" id="custom-alert-close-btn" aria-label="閉じる">&times;</button>
+        </div>
+        <div class="custom-modal-body">
+            <p id="custom-alert-message"></p>
+        </div>
+        <div class="custom-modal-footer">
+            <button type="button" class="btn btn-primary" id="custom-alert-ok-btn">OK</button>
+        </div>
+    </div>
+</div>
+
+<!-- Fullscreen Image Preview Modal -->
+<div id="fullscreen-preview-modal" class="modal">
+    <div class="modal-content-wrapper">
+        <span class="modal-close" id="fullscreen-preview-close" title="閉じる">&times;</span>
+        <img class="modal-content-image" id="fullscreen-preview-image">
+        <div id="fullscreen-preview-caption"></div>
+    </div>
+</div>

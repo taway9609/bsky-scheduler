@@ -1,0 +1,1251 @@
+import json
+import os
+import uuid
+from fastapi import APIRouter, Request, Depends, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
+from typing import Optional
+from datetime import datetime, timezone, timedelta
+import logging
+from app.database import get_db
+from app.models import BlueskyAccount, ScheduledPost, AppSettings, User, HashtagUsage
+from app.schemas import (
+    AccountResponse, AccountCreate, PostResponse, PostCreate,
+    SettingsResponse, SettingsUpdate
+)
+from app.utils import extract_hashtags_from_text, optimize_image
+from app.config import settings
+from app.api.deps import get_current_user, get_current_user_optional
+from app.services.auth import decode_token
+
+MAX_HASHTAGS_PER_USER = 50
+DUPLICATE_IMAGES_KEY = "duplicate_images"
+
+async def _get_duplicate_images_setting(db: AsyncSession, user_id: int) -> bool:
+    result = await db.execute(
+        select(AppSettings).where(
+            AppSettings.key == DUPLICATE_IMAGES_KEY,
+            AppSettings.user_id == user_id
+        )
+    )
+    setting = result.scalar_one_or_none()
+    if setting:
+        return setting.value.lower() == 'true'
+    return True
+
+async def _set_duplicate_images_setting(db: AsyncSession, user_id: int, value: bool):
+    result = await db.execute(
+        select(AppSettings).where(
+            AppSettings.key == DUPLICATE_IMAGES_KEY,
+            AppSettings.user_id == user_id
+        )
+    )
+    setting = result.scalar_one_or_none()
+    if setting:
+        setting.value = 'true' if value else 'false'
+    else:
+        setting = AppSettings(
+            key=DUPLICATE_IMAGES_KEY,
+            value='true' if value else 'false',
+            user_id=user_id
+        )
+        db.add(setting)
+
+router = APIRouter()
+
+
+@router.get("/scheduler", response_class=HTMLResponse)
+async def scheduler_page(request: Request, db: AsyncSession = Depends(get_db)):
+    from app.main import templates
+
+    token = request.cookies.get('access_token')
+    if not token:
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header.replace('Bearer ', '')
+
+    user = None
+    if token:
+        user_id = decode_token(token)
+        if user_id:
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+
+    if not user or not user.is_active:
+        return RedirectResponse(
+            url="/auth/login?return_url=/bluesky/scheduler",
+            status_code=302
+        )
+
+    result = await db.execute(select(AppSettings))
+    settings = result.scalars().all()
+    settings_dict = {s.key: s.value for s in settings}
+
+    return templates.TemplateResponse("bluesky/_base.html", {
+        "request": request,
+        "app_settings": settings_dict,
+        "username": user.username,
+        "accounts": {},
+        "scheduled_posts": {},
+        "is_admin": user.is_admin,
+        "user_id": user.id,
+        "is_dev": os.environ.get("IS_DEV", "false").lower() == "true",
+    })
+
+
+@router.get("/accounts", response_model=dict)
+async def get_accounts(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(BlueskyAccount).where(BlueskyAccount.user_id == current_user.id))
+    accounts = result.scalars().all()
+    
+    accounts_data = {
+        acc.username: {
+            'did': acc.did,
+            'username': acc.username,
+            'handle': acc.username,
+            'display_name': acc.display_name or ''
+        }
+        for acc in accounts
+    }
+    return {'status': 'success', 'accounts': accounts_data}
+
+
+@router.get("/get_accounts", response_model=dict)
+async def get_accounts_alias(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await get_accounts(db, current_user)
+
+
+@router.post("/accounts", response_model=dict)
+async def add_account(
+    account_data: AccountCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.services.bluesky import authenticate_account
+    from app.utils import encrypt_password
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.exc import IntegrityError
+    
+    auth_result = await authenticate_account(
+        account_data.identifier,
+        account_data.password
+    )
+    
+    if 'error' in auth_result:
+        return {'status': 'error', 'message': auth_result['error']}
+    
+    encrypted_password = encrypt_password(account_data.password)
+    
+    stmt = pg_insert(BlueskyAccount).values(
+        did=auth_result['did'],
+        username=auth_result['username'],
+        display_name=auth_result.get('display_name', ''),
+        password=encrypted_password,
+        user_id=current_user.id
+    ).on_conflict_do_update(
+        index_elements=['did'],
+        set_=dict(
+            username=auth_result['username'],
+            display_name=auth_result.get('display_name', ''),
+            password=encrypted_password,
+        )
+    )
+    
+    await db.execute(stmt)
+    await db.commit()
+    
+    result = await db.execute(select(BlueskyAccount).where(BlueskyAccount.user_id == current_user.id))
+    accounts = result.scalars().all()
+    accounts_data = {
+        acc.username: {
+            'did': acc.did,
+            'username': acc.username,
+            'handle': acc.username,
+            'display_name': acc.display_name or ''
+        }
+        for acc in accounts
+    }
+    return {'status': 'success', 'message': 'アカウントを追加しました', 'accounts': accounts_data}
+
+
+@router.delete("/accounts/{did}", response_model=dict)
+async def remove_account(did: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(
+        select(BlueskyAccount).where(
+            BlueskyAccount.did == did,
+            BlueskyAccount.user_id == current_user.id
+        )
+    )
+    account = result.scalar_one_or_none()
+    
+    if not account:
+        return {'status': 'error', 'message': 'アカウントが見つかりません'}
+    
+    username = account.username
+    
+    result = await db.execute(
+        select(ScheduledPost).where(
+            ScheduledPost.account_username == username,
+            ScheduledPost.user_id == current_user.id
+        )
+    )
+    posts = result.scalars().all()
+    for post in posts:
+        await db.delete(post)
+    
+    await db.delete(account)
+    await db.commit()
+    
+    result = await db.execute(select(BlueskyAccount).where(BlueskyAccount.user_id == current_user.id))
+    accounts = result.scalars().all()
+    accounts_data = {
+        acc.username: {
+            'did': acc.did,
+            'username': acc.username,
+            'handle': acc.username,
+            'display_name': acc.display_name or ''
+        }
+        for acc in accounts
+    }
+    return {'status': 'success', 'message': 'アカウントを削除しました', 'accounts': accounts_data}
+
+
+@router.get("/posts", response_model=dict)
+async def get_posts(
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    sort_column = ScheduledPost.created_at
+    if sort_by == "schedule_time":
+        sort_column = ScheduledPost.schedule_time
+    
+    if sort_order == "asc":
+        result = await db.execute(
+            select(ScheduledPost)
+            .where(ScheduledPost.user_id == current_user.id)
+            .options(selectinload(ScheduledPost.account_ref))
+            .order_by(sort_column.asc())
+        )
+    else:
+        result = await db.execute(
+            select(ScheduledPost)
+            .where(ScheduledPost.user_id == current_user.id)
+            .options(selectinload(ScheduledPost.account_ref))
+            .order_by(sort_column.desc())
+        )
+    posts = result.scalars().all()
+
+    # N+1 fix: Pre-fetch all parent posts
+    parent_post_ids = [post.parent_post_id for post in posts if post.parent_post_id]
+    parent_posts_content = {}
+    if parent_post_ids:
+        parent_result = await db.execute(
+            select(ScheduledPost.id, ScheduledPost.content)
+            .where(ScheduledPost.id.in_(parent_post_ids))
+        )
+        for parent_id, parent_content in parent_result.all():
+            parent_posts_content[parent_id] = parent_content or '(本文なし)'
+
+    posts_data = []
+    
+    # 開発環境でのテスト用投稿済み投稿
+    if os.environ.get('IS_DEV', 'false').lower() == 'true' and not posts:
+        posts_data.append({
+            'id': 'test-post-001',
+            'account': 'testuser.bsky.social',
+            'content': 'これはテスト投稿です。投稿済みの状態でBlueskyで開くボタンが表示されることを確認します。',
+            'langs': ['ja'],
+            'schedule_time': '2024-01-01T12:00:00Z',
+            'created_at': '2024-01-01T10:00:00Z',
+            'labels': [],
+            'status': 'posted',
+            'image_data': [],
+            'parent_post_id': None,
+            'external_reply_uri': None,
+            'external_reply_cid': None,
+            'error_message': None,
+            'post_uri': 'https://bsky.app/profile/testuser.bsky.social/post/3kpxgq6d7a22b',
+            'reply_gate': [],
+            'disable_quotes': False,
+            'is_quote': False,
+        })
+    
+    for post in posts:
+        image_data_with_urls = []
+        if post.image_data:
+            for img in post.image_data:
+                img_dict = dict(img)
+                if 'url' not in img_dict:
+                    img_dict['url'] = f"/static/images/{img.get('filename', '')}"
+                image_data_with_urls.append(img_dict)
+
+        post_dict = {
+            'id': post.id,
+            'account': post.account_username,
+            'content': post.content,
+            'langs': post.langs or ['ja'],
+            'schedule_time': post.schedule_time.strftime('%Y-%m-%dT%H:%M') + 'Z' if post.schedule_time else None,
+            'created_at': post.created_at.strftime('%Y-%m-%dT%H:%M') + 'Z' if post.created_at else None,
+            'labels': post.labels or [],
+            'status': post.status,
+            'image_data': image_data_with_urls,
+            'parent_post_id': post.parent_post_id,
+            'external_reply_uri': post.external_reply_uri,
+            'external_reply_cid': post.external_reply_cid,
+            'error_message': post.error_message,
+            'post_uri': post.post_uri,
+            'reply_gate': post.reply_gate,
+            'disable_quotes': post.disable_quotes,
+            'is_quote': post.is_quote,
+        }
+
+        if post.parent_post_id and post.parent_post_id in parent_posts_content:
+            parent_content = parent_posts_content[post.parent_post_id]
+            post_dict['parent_post_preview'] = (
+                parent_content[:100] + '...' if len(parent_content) > 100 else parent_content
+            )
+
+        posts_data.append(post_dict)
+    
+    return {'status': 'success', 'data': posts_data}
+
+
+@router.get("/get_posts", response_model=dict)
+async def get_posts_alias(
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await get_posts(sort_by, sort_order, db, current_user)
+
+
+@router.get("/posts/{post_id}", response_model=dict)
+async def get_post(post_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(
+        select(ScheduledPost).where(
+            ScheduledPost.id == post_id,
+            ScheduledPost.user_id == current_user.id
+        )
+    )
+    post = result.scalar_one_or_none()
+    
+    if not post:
+        return {'status': 'error', 'message': '投稿が見つかりません'}
+    
+    image_data_with_urls = []
+    if post.image_data:
+        for img in post.image_data:
+            img_dict = dict(img)
+            if 'url' not in img_dict:
+                img_dict['url'] = f"/static/images/{img.get('filename', '')}"
+            image_data_with_urls.append(img_dict)
+    
+    post_dict = {
+        'id': post.id,
+        'account': post.account_username,
+        'content': post.content,
+        'langs': post.langs or ['ja'],
+        'schedule_time': post.schedule_time.strftime('%Y-%m-%dT%H:%M') + 'Z' if post.schedule_time else None,
+        'labels': post.labels or [],
+        'status': post.status,
+        'image_data': image_data_with_urls,
+        'parent_post_id': post.parent_post_id,
+        'external_reply_uri': post.external_reply_uri,
+        'external_reply_cid': post.external_reply_cid,
+        'error_message': post.error_message,
+        'post_uri': post.post_uri,
+        'reply_gate': post.reply_gate,
+        'disable_quotes': post.disable_quotes,
+        'is_quote': post.is_quote,
+    }
+    
+    return {'status': 'success', 'data': post_dict}
+
+
+from fastapi import UploadFile, Request
+
+@router.post("/posts", response_model=dict)
+async def create_post(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    account_did: str = Form(...),
+    content: str = Form(""),
+    schedule_time: Optional[str] = Form(None),
+    language: Optional[str] = Form("ja"),
+    image_data: Optional[str] = Form(None),
+    labels: Optional[str] = Form(None),
+    parent_post_id: Optional[str] = Form(None),
+    external_reply_uri: Optional[str] = Form(None),
+    external_reply_cid: Optional[str] = Form(None),
+    reply_gate: Optional[str] = Form(None),
+    disable_quotes: str = Form("0"),
+    is_quote: str = Form("0"),
+    source_post_id: Optional[str] = Form(None),
+):
+    # Get uploaded files from request
+    form = await request.form()
+    images = form.getlist('images')
+    
+    saved_images = []
+    
+    # Copy images from source post if source_post_id is provided
+    if source_post_id and not images:
+        should_duplicate_images = await _get_duplicate_images_setting(db, current_user.id)
+        logging.warning(f"[DEBUG] source_post_id={source_post_id}, should_duplicate_images={should_duplicate_images}, user_id={current_user.id}")
+        if should_duplicate_images:
+            source_result = await db.execute(
+                select(ScheduledPost).where(
+                    ScheduledPost.id == source_post_id,
+                    ScheduledPost.user_id == current_user.id
+                )
+            )
+            source_post = source_result.scalar_one_or_none()
+            
+            if source_post and source_post.image_data:
+                os.makedirs(settings.IMAGE_FOLDER, exist_ok=True)
+                
+                for idx, img_data in enumerate(source_post.image_data):
+                    source_path = os.path.join(settings.IMAGE_FOLDER, img_data['filename'])
+                    
+                    if os.path.exists(source_path):
+                        # Read original file and optimize
+                        with open(source_path, 'rb') as src:
+                            original_content = src.read()
+                        
+                        # Apply optimization
+                        optimized_content, ext = optimize_image(original_content)
+                        
+                        new_filename = f"{uuid.uuid4()}{ext}"
+                        new_path = os.path.join(settings.IMAGE_FOLDER, new_filename)
+                        
+                        with open(new_path, 'wb') as dst:
+                            dst.write(optimized_content)
+                        
+                        saved_images.append({
+                            'filename': new_filename,
+                            'url': f'/static/images/{new_filename}',
+                            'alt_text': img_data.get('alt_text', ''),
+                            'order': img_data.get('order', idx),
+                            'id': f"{uuid.uuid4()}",
+                            'name': img_data.get('name', img_data['filename']),
+                            'size': len(optimized_content),
+                            'original_size': len(original_content)  # Store original size for UI
+                        })
+    
+    # Handle pre-uploaded images from image_data (images already uploaded via /upload_image)
+    # Skip if source_post_id is provided AND duplicate_images setting is False
+    should_duplicate = await _get_duplicate_images_setting(db, current_user.id)
+    if image_data and not (source_post_id and not should_duplicate):
+        try:
+            img_data_parsed = json.loads(image_data) if isinstance(image_data, str) else image_data
+            os.makedirs(settings.IMAGE_FOLDER, exist_ok=True)
+            
+            for img_info in img_data_parsed:
+                server_filename = img_info.get('serverFilename', '')
+                if server_filename:
+                    filepath = os.path.join(settings.IMAGE_FOLDER, server_filename)
+                    if os.path.exists(filepath):
+                        saved_images.append({
+                            'filename': server_filename,
+                            'url': f'/static/images/{server_filename}',
+                            'alt_text': img_info.get('alt', ''),
+                            'order': img_info.get('order', len(saved_images)),
+                            'id': img_info.get('id', ''),
+                            'name': img_info.get('name', server_filename),
+                            'size': img_info.get('size', 0),
+                        })
+        except json.JSONDecodeError:
+            pass
+    
+    # Handle newly uploaded images (via multipart/form-data)
+    # Only process if image_data (serverFilename) is NOT provided
+    # This prevents duplicate processing when images are pre-uploaded
+    if images and len(images) > 0 and not image_data:
+        os.makedirs(settings.IMAGE_FOLDER, exist_ok=True)
+        for idx, img in enumerate(images):
+            if img and img.filename:
+                img_content = await img.read()
+                optimized_content, ext = optimize_image(img_content)
+                filename = f"{uuid.uuid4()}{ext}"
+                filepath = os.path.join(settings.IMAGE_FOLDER, filename)
+                
+                with open(filepath, 'wb') as f:
+                    f.write(optimized_content)
+                
+                saved_images.append({
+                    'filename': filename,
+                    'url': f'/static/images/{filename}',
+                    'alt_text': '',
+                    'order': idx,
+                    'size': len(optimized_content)
+                })
+    
+    # Build final image list - saved_images already contains all images
+    image_list = saved_images if saved_images else []
+    
+    label_list = []
+    if labels:
+        try:
+            label_list = json.loads(labels) if isinstance(labels, str) else labels
+        except (json.JSONDecodeError, TypeError):
+            label_list = []
+
+    reply_gate_list = []
+    if reply_gate:
+        try:
+            reply_gate_list = json.loads(reply_gate) if isinstance(reply_gate, str) else reply_gate
+        except (json.JSONDecodeError, TypeError):
+            reply_gate_list = []
+    
+    result = await db.execute(
+        select(BlueskyAccount).where(
+            BlueskyAccount.did == account_did,
+            BlueskyAccount.user_id == current_user.id
+        )
+    )
+    account = result.scalar_one_or_none()
+    
+    if not account:
+        return {'status': 'error', 'message': f'DID {account_did} のアカウントが見つかりません'}
+    
+    schedule_datetime = None
+    if schedule_time:
+        schedule_datetime = datetime.fromisoformat(schedule_time.replace('Z', '+00:00'))
+        if schedule_datetime.tzinfo is None:
+            jst = timezone(timedelta(hours=9))
+            schedule_datetime = schedule_datetime.replace(tzinfo=jst)
+        schedule_datetime = schedule_datetime.replace(tzinfo=None)
+    
+    new_post = ScheduledPost(
+        id=str(uuid.uuid4()),
+        account_did=account_did,
+        account_username=account.username,
+        user_id=current_user.id,
+        content=content,
+        langs=[language] if language else ['ja'],
+        schedule_time=schedule_datetime,
+        image_data=image_list,
+        labels=label_list,
+        status='pending',
+        parent_post_id=parent_post_id,
+        external_reply_uri=external_reply_uri,
+        external_reply_cid=external_reply_cid,
+        reply_gate=reply_gate_list,
+        disable_quotes=disable_quotes == '1' or disable_quotes == 'true',
+        is_quote=is_quote == '1' or is_quote == 'true',
+    )
+    
+    db.add(new_post)
+    await db.commit()
+    
+    if schedule_datetime:
+        from app.scheduler import schedule_post_job
+        await schedule_post_job(new_post.id, schedule_datetime)
+    
+    if content:
+        used_hashtags = extract_hashtags_from_text(content)
+        for tag_text in used_hashtags:
+            result = await db.execute(
+                select(HashtagUsage).where(
+                    HashtagUsage.user_id == current_user.id,
+                    HashtagUsage.tag == tag_text
+                )
+            )
+            usage = result.scalar_one_or_none()
+            
+    if usage:
+        usage.last_used = datetime.now()
+    else:
+                usage = HashtagUsage(
+                    account_username=account.username,
+                    user_id=current_user.id,
+                    tag=tag_text
+                )
+                db.add(usage)
+        
+        result = await db.execute(
+            select(HashtagUsage)
+            .where(HashtagUsage.user_id == current_user.id)
+            .order_by(HashtagUsage.last_used.desc())
+        )
+        all_usages = result.scalars().all()
+        
+        if len(all_usages) > MAX_HASHTAGS_PER_USER:
+            to_delete = all_usages[MAX_HASHTAGS_PER_USER:]
+            for usage in to_delete:
+                await db.delete(usage)
+        
+        await db.commit()
+    
+    return {'status': 'success', 'message': '投稿をスケジュールしました'}
+
+
+@router.post("/edit_scheduled_post/{post_id}", response_model=dict)
+async def edit_scheduled_post(
+    post_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    import uuid
+    import json
+    import os
+    from datetime import datetime
+    from fastapi import Request
+    from app.scheduler import cancel_scheduled_job, schedule_post_job
+    
+    result = await db.execute(
+        select(ScheduledPost).where(
+            ScheduledPost.id == post_id,
+            ScheduledPost.user_id == current_user.id
+        )
+    )
+    post = result.scalar_one_or_none()
+    
+    if not post:
+        return {'status': 'error', 'message': '投稿が見つかりません'}
+    
+    if post.status == 'posted':
+        return {'status': 'error', 'message': '既に投稿済みのため編集できません'}
+    
+    form = await request.form()
+    account_did = form.get('account_did')
+    content = form.get('content', '')
+    schedule_time = form.get('schedule_time')
+    language = form.get('language', 'ja')
+    image_data = form.get('image_data')
+    labels = form.get('labels')
+    parent_post_id = form.get('parent_post_id')
+    external_reply_uri = form.get('external_reply_uri')
+    external_reply_cid = form.get('external_reply_cid')
+    reply_gate = form.get('reply_gate')
+    disable_quotes = form.get('disable_quotes', '0')
+    is_quote = form.get('is_quote', '0')
+    images = form.getlist('images')
+    
+    account_result = await db.execute(
+        select(BlueskyAccount).where(
+            BlueskyAccount.did == account_did,
+            BlueskyAccount.user_id == current_user.id
+        )
+    )
+    account = account_result.scalar_one_or_none()
+    if not account:
+        return {'status': 'error', 'message': 'アカウントが見つかりません'}
+    
+    schedule_datetime = None
+    if schedule_time:
+        schedule_datetime = datetime.fromisoformat(schedule_time.replace('Z', '+00:00'))
+        if schedule_datetime.tzinfo is None:
+            from datetime import timezone, timedelta
+            jst = timezone(timedelta(hours=9))
+            schedule_datetime = schedule_datetime.replace(tzinfo=jst)
+        schedule_datetime = schedule_datetime.replace(tzinfo=None)
+    
+    post.account_did = account_did
+    post.account_username = account.username
+    post.content = content
+    post.langs = [language] if language else ['ja']
+    post.schedule_time = schedule_datetime
+    post.labels = json.loads(labels) if labels else []
+    post.parent_post_id = parent_post_id
+    post.external_reply_uri = external_reply_uri
+    post.external_reply_cid = external_reply_cid
+    post.reply_gate = json.loads(reply_gate) if reply_gate else []
+    post.disable_quotes = disable_quotes == '1' or disable_quotes == 'true'
+    post.is_quote = is_quote == '1' or is_quote == 'true'
+    
+    await cancel_scheduled_job(post_id)
+    
+    if schedule_datetime:
+        await schedule_post_job(post.id, schedule_datetime)
+    
+    await db.commit()
+    
+    return {'status': 'success', 'message': '投稿を更新しました'}
+
+
+@router.delete("/posts/{post_id}", response_model=dict)
+async def delete_post(post_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(
+        select(ScheduledPost).where(
+            ScheduledPost.id == post_id,
+            ScheduledPost.user_id == current_user.id
+        )
+    )
+    post = result.scalar_one_or_none()
+    
+    if not post:
+        return {'status': 'error', 'message': '投稿が見つかりません'}
+    
+    if post.status == 'posting':
+        return {'status': 'error', 'message': 'この投稿は投稿中のため削除できません'}, 403
+    
+    if post.image_data:
+        import os
+        for img in post.image_data:
+            image_path = os.path.join(settings.IMAGE_FOLDER, img['filename'])
+            if os.path.exists(image_path):
+                os.remove(image_path)
+    
+    from app.scheduler import cancel_scheduled_job
+    await cancel_scheduled_job(post_id)
+    
+    await db.delete(post)
+    await db.commit()
+    
+    return {'status': 'success', 'message': '投稿を削除しました'}
+
+
+@router.get("/settings", response_model=dict)
+async def get_settings(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    duplicate_images = await _get_duplicate_images_setting(db, current_user.id)
+    return {'status': 'success', 'data': {'duplicate_images': duplicate_images}}
+
+
+@router.post("/settings", response_model=dict)
+async def update_settings(
+    settings_data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if 'duplicate_images' in settings_data:
+        await _set_duplicate_images_setting(db, current_user.id, settings_data['duplicate_images'])
+        await db.commit()
+    return {'status': 'success', 'message': '設定を保存しました'}
+
+
+@router.get("/hashtags", response_model=dict)
+async def get_hashtag_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(HashtagUsage)
+        .where(HashtagUsage.user_id == current_user.id)
+        .order_by(HashtagUsage.last_used.desc())
+        .limit(MAX_HASHTAGS_PER_USER)
+    )
+    usages = result.scalars().all()
+    
+    return {'status': 'success', 'data': [usage.tag for usage in usages]}
+
+
+@router.post("/hashtags/clear", response_model=dict)
+async def clear_hashtag_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await db.execute(
+        delete(HashtagUsage).where(HashtagUsage.user_id == current_user.id)
+    )
+    await db.commit()
+    return {'status': 'success', 'message': 'ハッシュタグ履歴をクリアしました'}
+
+
+@router.get("/logout", response_class=HTMLResponse)
+async def logout():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/bluesky/scheduler", status_code=302)
+
+
+@router.get("/get_accounts", response_model=dict)
+async def get_accounts_alias(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await get_accounts(db, current_user)
+
+
+@router.post("/add_account", response_model=dict)
+async def add_account_alias(
+    account_data: AccountCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await add_account(account_data, db, current_user)
+
+
+@router.post("/remove_account/{did}", response_model=dict)
+async def remove_account_alias(did: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await remove_account(did, db, current_user)
+
+
+@router.get("/get_post/{post_id}", response_model=dict)
+async def get_post_alias(post_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await get_post(post_id, db, current_user)
+
+
+@router.post("/schedule_post", response_model=dict)
+async def schedule_post_alias(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    account_did: str = Form(...),
+    content: str = Form(""),
+    schedule_time: Optional[str] = Form(None),
+    language: Optional[str] = Form("ja"),
+    image_data: Optional[str] = Form(None),
+    labels: Optional[str] = Form(None),
+    parent_post_id: Optional[str] = Form(None),
+    external_reply_uri: Optional[str] = Form(None),
+    external_reply_cid: Optional[str] = Form(None),
+    reply_gate: Optional[str] = Form(None),
+    disable_quotes: str = Form("0"),
+    is_quote: str = Form("0"),
+    source_post_id: Optional[str] = Form(None),
+):
+    return await create_post(
+        request,
+        db,
+        current_user,
+        account_did=account_did,
+        content=content,
+        schedule_time=schedule_time,
+        language=language,
+        image_data=image_data,
+        labels=labels,
+        parent_post_id=parent_post_id,
+        external_reply_uri=external_reply_uri,
+        external_reply_cid=external_reply_cid,
+        reply_gate=reply_gate,
+        disable_quotes=disable_quotes,
+        is_quote=is_quote,
+        source_post_id=source_post_id,
+    )
+
+
+@router.post("/upload_image", response_model=dict)
+async def upload_image(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    import uuid
+    import os
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    form = await request.form()
+    image = form.get('image')
+    
+    logger.debug(f"Image upload request received. Filename: {image.filename if image else 'None'}")
+    
+    if not image or not image.filename:
+        logger.warning("Image upload failed - no image file provided")
+        return {'status': 'error', 'message': '画像が選択されていません'}
+    
+    original_size = 0
+    try:
+        img_content = await image.read()
+        original_size = len(img_content)
+        logger.debug(f"Image read successfully. Original size: {original_size} bytes")
+    except Exception as e:
+        logger.error(f"Image upload failed - error reading image: {str(e)}")
+        return {'status': 'error', 'message': f'画像の読み込みに失敗しました: {str(e)}'}
+    
+    logger.debug(f"Starting image optimization. File size: {original_size} bytes")
+    optimized_content, ext = optimize_image(img_content)
+    logger.debug(f"Image optimization completed. Optimized size: {len(optimized_content)} bytes, Extension: {ext}")
+    
+    os.makedirs(settings.IMAGE_FOLDER, exist_ok=True)
+    filename = f"{uuid.uuid4()}{ext}"
+    filepath = os.path.join(settings.IMAGE_FOLDER, filename)
+    
+    with open(filepath, 'wb') as f:
+        f.write(optimized_content)
+    
+    optimized_size = len(optimized_content)
+    
+    return {
+        'status': 'success',
+        'filename': filename,
+        'url': f'/static/images/{filename}',
+        'size': optimized_size,
+        'original_size': original_size,
+        'ext': ext
+    }
+
+
+@router.delete("/image/{filename}", response_model=dict)
+async def delete_image(
+    filename: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    import os
+    
+    filepath = os.path.join(settings.IMAGE_FOLDER, filename)
+    
+    if os.path.exists(filepath):
+        os.remove(filepath)
+        return {'status': 'success', 'message': f'画像を削除しました: {filename}'}
+    else:
+        return {'status': 'error', 'message': f'画像が見つかりません: {filename}'}
+
+
+@router.post("/edit_account", response_model=dict)
+async def edit_account(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from fastapi import Request
+    from app.services.bluesky import authenticate_account
+    from app.utils import encrypt_password
+    import json
+    
+    # Get form data
+    body = await request.body()
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return {'status': 'error', 'message': '無効なリクエストです'}
+    
+    identifier = data.get('identifier')
+    password = data.get('password')
+    
+    if not identifier or not password:
+        return {'status': 'error', 'message': '識別子とパスワードを入力してください'}
+    
+    # Authenticate the account
+    auth_result = await authenticate_account(identifier, password)
+    
+    if 'error' in auth_result:
+        return {'status': 'error', 'message': auth_result['error']}
+    
+    # Update the account in the database
+    result = await db.execute(
+        select(BlueskyAccount).where(
+            BlueskyAccount.username == auth_result['username'],
+            BlueskyAccount.user_id == current_user.id
+        )
+    )
+    account = result.scalar_one_or_none()
+    
+    if not account:
+        return {'status': 'error', 'message': 'アカウントが見つかりません'}
+    
+    # Update account information
+    account.did = auth_result['did']
+    account.display_name = auth_result.get('display_name', '')
+    account.password = encrypt_password(password)
+    
+    await db.commit()
+    
+    return {'status': 'success', 'message': 'アカウント情報を更新しました'}
+
+
+@router.post("/sync_account/{did}", response_model=dict)
+async def sync_account_alias(did: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from app.services.bluesky import get_profile
+    from app.config import settings
+    from fastapi import HTTPException, status
+    
+    # Get account from database
+    result = await db.execute(
+        select(BlueskyAccount).where(
+            BlueskyAccount.did == did,
+            BlueskyAccount.user_id == current_user.id
+        )
+    )
+    account = result.scalar_one_or_none()
+    
+    if not account:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='アカウントが見つかりません')
+    
+    try:
+        # Get profile information from Bluesky
+        profile = await get_profile(account.username)
+        if profile and hasattr(profile, 'display_name'):
+            account.display_name = profile.display_name or ''
+            await db.commit()
+            return {'status': 'success', 'message': 'アカウント情報を更新しました', 'display_name': profile.display_name or ''}
+        else:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail='プロフィール情報の取得に失敗しました')
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f'アカウント情報の同期に失敗しました: {str(e)}')
+
+
+@router.post("/pause_job/{post_id}", response_model=dict)
+async def pause_job(post_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(
+        select(ScheduledPost).where(
+            ScheduledPost.id == post_id,
+            ScheduledPost.user_id == current_user.id
+        )
+    )
+    post = result.scalar_one_or_none()
+    if not post:
+        return {'status': 'error', 'message': '投稿が見つかりません'}
+    post.status = 'paused'
+    await db.commit()
+    return {'status': 'success', 'message': 'ジョブを一時停止しました'}
+
+
+@router.post("/resume_job/{post_id}", response_model=dict)
+async def resume_job(post_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(
+        select(ScheduledPost).where(
+            ScheduledPost.id == post_id,
+            ScheduledPost.user_id == current_user.id
+        )
+    )
+    post = result.scalar_one_or_none()
+    if not post:
+        return {'status': 'error', 'message': '投稿が見つかりません'}
+    post.status = 'pending'
+    await db.commit()
+    return {'status': 'success', 'message': 'ジョブを再開しました'}
+
+
+@router.post("/duplicate_post/{post_id}", response_model=dict)
+async def duplicate_post(post_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    import uuid
+    import os
+    import copy
+    
+    result = await db.execute(
+        select(ScheduledPost).where(
+            ScheduledPost.id == post_id,
+            ScheduledPost.user_id == current_user.id
+        )
+    )
+    post = result.scalar_one_or_none()
+    if not post:
+        return {'status': 'error', 'message': '投稿が見つかりません'}
+    
+    new_image_data = None
+    new_image_data = None
+    if post.image_data:
+        should_duplicate_images = await _get_duplicate_images_setting(db, current_user.id)
+        if should_duplicate_images:
+            new_image_data = []
+            os.makedirs(settings.IMAGE_FOLDER, exist_ok=True)
+            
+            for img_info in post.image_data:
+                source_filename = img_info.get('filename', '')
+                source_path = os.path.join(settings.IMAGE_FOLDER, source_filename)
+                
+                if source_filename and os.path.exists(source_path):
+                    # Read and optimize the image
+                    with open(source_path, 'rb') as src:
+                        original_content = src.read()
+                    
+                    optimized_content, ext = optimize_image(original_content)
+                    new_filename = f"{uuid.uuid4()}{ext}"
+                    new_path = os.path.join(settings.IMAGE_FOLDER, new_filename)
+                    
+                    with open(new_path, 'wb') as dst:
+                        dst.write(optimized_content)
+                    
+                    new_image_data.append({
+                        'filename': new_filename,
+                        'url': f'/static/images/{new_filename}',
+                        'alt_text': img_info.get('alt_text', ''),
+                        'order': len(new_image_data),
+                        'id': f"{uuid.uuid4()}",
+                        'name': img_info.get('name', source_filename),
+                        'size': len(optimized_content),
+                        'original_size': len(original_content)  # Add original size
+                    })
+    
+    new_post = ScheduledPost(
+        id=str(uuid.uuid4()),
+        account_did=post.account_did,
+        account_username=post.account_username,
+        user_id=current_user.id,
+        content=post.content,
+        langs=post.langs,
+        schedule_time=post.schedule_time,
+        image_data=new_image_data,
+        labels=post.labels,
+        parent_post_id=post.parent_post_id,
+        external_reply_uri=post.external_reply_uri,
+        external_reply_cid=post.external_reply_cid,
+        reply_gate=post.reply_gate,
+        disable_quotes=post.disable_quotes,
+        is_quote=post.is_quote,
+        status='pending',
+    )
+    db.add(new_post)
+    await db.commit()
+    return {'status': 'success', 'message': '投稿を複製しました', 'data': {'new_post_id': new_post.id}}
+
+
+@router.post("/delete_scheduled_post/{post_id}", response_model=dict)
+async def delete_scheduled_post(post_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(
+        select(ScheduledPost).where(
+            ScheduledPost.id == post_id,
+            ScheduledPost.user_id == current_user.id
+        )
+    )
+    post = result.scalar_one_or_none()
+    if not post:
+        return {'status': 'error', 'message': '投稿が見つかりません'}
+    await db.delete(post)
+    await db.commit()
+    return {'status': 'success', 'message': '投稿を削除しました'}
+
+
+@router.post("/delete_selected_posts", response_model=dict)
+async def delete_selected_posts(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from fastapi import Body
+    import json
+    
+    body = await request.body()
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return {'status': 'error', 'message': '無効なリクエストです'}
+    
+    post_ids = data.get('post_ids', [])
+    
+    if not post_ids:
+        return {'status': 'error', 'message': '削除する投稿が選択されていません'}
+    
+    deleted_count = 0
+    for post_id in post_ids:
+        result = await db.execute(
+            select(ScheduledPost).where(
+                ScheduledPost.id == post_id,
+                ScheduledPost.user_id == current_user.id
+            )
+        )
+        post = result.scalar_one_or_none()
+        
+        if post:
+            if post.status == 'posting':
+                continue
+            
+            if post.image_data:
+                import os
+                for img in post.image_data:
+                    image_path = os.path.join(settings.IMAGE_FOLDER, img.get('filename', ''))
+                    if image_path and os.path.exists(image_path):
+                        os.remove(image_path)
+            
+            from app.scheduler import cancel_scheduled_job
+            await cancel_scheduled_job(post_id)
+            
+            await db.delete(post)
+            deleted_count += 1
+    
+    await db.commit()
+    return {'status': 'success', 'message': f'{deleted_count}件の投稿を削除しました', 'deleted_count': deleted_count}
+
+
+@router.post("/resolve_cid_to_post", response_model=dict)
+async def resolve_cid_to_post(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return {'status': 'error', 'message': 'この機能はまだ実装されていません'}
+
+
+@router.post("/resolve_external_url", response_model=dict)
+async def resolve_external_url(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    body = await request.body()
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return {'status': 'error', 'message': '無効なリクエストです'}
+
+    url = data.get('url', '')
+    if not url:
+        return {'status': 'error', 'message': 'URLが指定されていません'}
+
+    patterns = [
+        r'bsky\.app/profile/([^/]+)/post/([a-zA-Z0-9]+)',
+        r'([a-zA-Z0-9-]+\.bsky\.social)/post/([a-zA-Z0-9]+)',
+    ]
+    
+    handle = None
+    post_id = None
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            handle = match.group(1)
+            post_id = match.group(2)
+            break
+    
+    if not handle or not post_id:
+        return {'status': 'error', 'message': '無効なBluesky URLです'}
+    
+    try:
+        from app.config import settings
+        import httpx
+        
+        if handle == 'profile':
+            return {'status': 'error', 'message': '無効なURLです'}
+        
+        if settings.USE_MOCK_BLUESKY:
+            from tests.utils.mock_bluesky import MockBlueskyClient
+            client = MockBlueskyClient()
+        else:
+            from atproto import Client
+            client = Client()
+        
+        post_uri = f'at://{handle}/app.bsky.feed.post/{post_id}'
+        post_cid = None
+        content = ''
+        author_handle = handle
+        author_display_name = handle
+        
+        # Try to get post record
+        try:
+            response = client.com.atproto.repo.get_record({
+                'repo': handle,
+                'collection': 'app.bsky.feed.post',
+                'rkey': post_id,
+            })
+            
+            post_uri = response.uri
+            post_cid = response.cid
+            
+            record = response.value
+            if record:
+                content = getattr(record, 'text', '') or ''
+        except Exception as e:
+            error_msg = str(e)
+            if 'RecordNotFound' in error_msg or 'Record not found' in error_msg:
+                return {'status': 'error', 'message': 'この投稿は削除されたか存在しません'}
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to get record for {handle}/{post_id}: {e}")
+        
+        # Get profile using api.bsky.app (doesn't require auth)
+        try:
+            profile_url = 'https://api.bsky.app/xrpc/app.bsky.actor.getProfile'
+            profile_response = httpx.get(profile_url, params={'actor': handle}, timeout=10)
+            if profile_response.status_code == 200:
+                profile_data = profile_response.json()
+                author_display_name = profile_data.get('displayName') or handle
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to get profile for {handle}: {e}")
+        
+        return {
+            'status': 'success',
+            'data': {
+                'post_uri': post_uri,
+                'post_cid': post_cid,
+                'content': content,
+                'account': author_handle,
+                'display_name': author_display_name
+            }
+        }
+            
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error resolving external URL: {e}")
+        return {'status': 'error', 'message': f'URLの解決に失敗しました: {str(e)}'}

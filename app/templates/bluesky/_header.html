@@ -1,0 +1,162 @@
+<!-- ヘッダー -->
+<header class="header">
+    <div class="header-content">
+        <h1 class="logo">
+            <i class="fab fa-bluesky"></i>
+            BlueSky Scheduler
+        </h1>
+        <div class="user-info">
+            <button class="theme-toggle" id="theme-toggle-btn" title="ダークモード切り替え">
+                <i class="fas fa-moon"></i>
+                <span class="d-none d-sm-inline">ダークモード</span>
+            </button>
+            <a href="/admin" class="btn btn-sm btn-outline-light me-2" id="admin-link" style="display: {% if is_admin %}inline-block{% else %}none{% endif %};">
+                <i class="fas fa-cog"></i> 管理
+            </a>
+            <span class="username" id="header-username">{{ username }}</span>
+            <button class="logout-btn" id="logout-btn" style="display: {% if user_id %}inline-block{% else %}none{% endif %};">
+                <i class="fas fa-sign-out-alt"></i>
+                ログアウト
+            </button>
+        </div>
+    </div>
+</header>
+
+<script>
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+function getAuthToken() {
+    return localStorage.getItem('access_token') || getCookie('access_token');
+}
+
+function isLoggedIn() {
+    const token = getAuthToken();
+    if (!token) return false;
+    
+    const expiresIn = parseInt(localStorage.getItem('token_expires_in') || '0');
+    const receivedAt = parseInt(localStorage.getItem('token_received_at') || '0');
+    
+    const now = Date.now();
+    const expiresAt = receivedAt + (expiresIn * 1000);
+    
+    return now < expiresAt;
+}
+
+function getCurrentUser() {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+        try {
+            return JSON.parse(userStr);
+        } catch (e) {
+            return null;
+        }
+    }
+    return null;
+}
+
+function updateHeaderUser() {
+    const user = getCurrentUser();
+    const token = getAuthToken();
+    const isAdmin = getCookie('is_admin') === '1';
+    const cookieUsername = getCookie('username');
+    const hasUserCookie = getCookie('user_id') !== null;
+    const usernameEl = document.getElementById('header-username');
+    const logoutBtn = document.getElementById('logout-btn');
+    const adminLink = document.getElementById('admin-link');
+
+    // Check login via token or presence of user_id cookie
+    const isLogged = isLoggedIn() || token || hasUserCookie;
+
+    if (logoutBtn) {
+        if (isLogged) {
+            logoutBtn.style.display = 'inline-block';
+        } else {
+            logoutBtn.style.display = 'none';
+        }
+    }
+    
+    if (adminLink) {
+        if (isAdmin) {
+            adminLink.style.display = 'inline-block';
+        } else {
+            adminLink.style.display = 'none';
+        }
+    }
+    
+    if (usernameEl) {
+        if (user && user.username) {
+            usernameEl.textContent = user.username;
+        } else if (cookieUsername) {
+            usernameEl.textContent = cookieUsername;
+        }
+    }
+}
+
+async function logout() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('token_expires_in');
+    localStorage.removeItem('token_received_at');
+    localStorage.removeItem('user');
+    try {
+        await fetch('/auth/logout', { method: 'POST' });
+    } catch (e) {}
+    window.location.href = '/auth/login';
+}
+
+function checkAuthAndRedirect() {
+    if (!isLoggedIn() && !getAuthToken()) {
+        window.location.href = '/auth/login';
+        return false;
+    }
+    return true;
+}
+
+// ヘッダーのユーザー情報はサーバーサイドでレンダリングされているため、
+// 自動更新は不要。必要に応じて updateHeaderUser() を呼び出せる。
+// ダークモード切り替え
+function toggleDarkMode() {
+    const body = document.body;
+    const isDark = body.classList.contains('dark-mode');
+    
+    if (isDark) {
+        body.classList.remove('dark-mode');
+    } else {
+        body.classList.add('dark-mode');
+    }
+    
+    const newIsDark = body.classList.contains('dark-mode');
+    localStorage.setItem('bluesky_dark_mode', newIsDark);
+    
+    updateThemeButton(newIsDark);
+}
+
+// テーマボタンの表示を更新
+function updateThemeButton(isDark) {
+    const icon = document.querySelector('.theme-toggle i');
+    const text = document.querySelector('.theme-toggle span');
+    if (icon) {
+        icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+    }
+    if (text) {
+        text.textContent = isDark ? 'ライトモード' : 'ダークモード';
+    }
+}
+
+// 保存されたダークモード設定を適用（デフォルトはダークモード）
+document.addEventListener('DOMContentLoaded', function() {
+    const stored = localStorage.getItem('bluesky_dark_mode');
+    const isDark = stored === null || stored === 'true';
+    const body = document.body;
+
+    if (isDark) {
+        body.classList.add('dark-mode');
+    }
+
+    updateThemeButton(isDark);
+});
+</script>

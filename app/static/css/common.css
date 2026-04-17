@@ -1,0 +1,659 @@
+/* 共通スタイル - 全ページで共通 */
+
+/* リセット & ベーススタイル */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    /* デフォルトはライトモード */
+    --primary-color: #1da1f2;
+    --primary-dark: #1991db;
+    --secondary-color: #657786;
+    --success-color: #1da1f2;
+    --danger-color: #e0245e;
+    --warning-color: #ffad1f;
+    --background-color: #f7f9fa;
+    --surface-color: #ffffff;
+    --card-background: #ffffff;
+    --text-primary: #14171a;
+    --text-secondary: #657786;
+    --border-color: #e1e8ed;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.15);
+    --border-radius: 12px;
+    --transition: all 0.3s ease;
+}
+
+/* ダークモード */
+body.dark-mode {
+    --primary-color: #1da1f2;
+    --primary-dark: #1991db;
+    --secondary-color: #8b98a5;
+    --success-color: #1da1f2;
+    --danger-color: #f91880;
+    --warning-color: #ffad1f;
+    --background-color: #0f1419;
+    --surface-color: #1e2732;
+    --card-background: #1e2732;
+    --text-primary: #f7f9f9;
+    --text-secondary: #8b98a5;
+    --border-color: #38444d;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-primary);
+    line-height: 1.6;
+    overflow-x: hidden;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* ユーティリティクラス */
+.text-muted { color: var(--text-secondary) !important; }
+.text-primary { color: var(--primary-color) !important; }
+.fw-bold { font-weight: 700 !important; }
+.d-block { display: block !important; }
+.d-none { display: none !important; }
+.mt-2 { margin-top: 0.5rem !important; }
+.mt-4 { margin-top: 1.5rem !important; }
+.mb-1 { margin-bottom: 0.25rem !important; }
+.mb-3 { margin-bottom: 1rem !important; }
+.mb-4 { margin-bottom: 1.5rem !important; }
+.mb-5 { margin-bottom: 3rem !important; }
+.ms-2 { margin-left: 0.5rem !important; }
+.me-1 { margin-right: 0.25rem !important; }
+.me-2 { margin-right: 0.5rem !important; }
+
+/* フォーム要素 */
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    transition: var(--transition);
+    background: var(--surface-color);
+    color: var(--text-primary);
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(29, 161, 242, 0.1);
+}
+
+textarea.form-control {
+    min-height: 100px;
+    resize: vertical;
+    font-family: inherit;
+    line-height: 1.6;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.form-text {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+/* ボタン共通スタイル */
+.btn {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.btn:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-hover);
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+}
+
+.btn-secondary {
+    background: var(--secondary-color);
+}
+
+.btn-danger {
+    background: var(--danger-color);
+}
+
+.btn-success {
+    background: var(--success-color);
+}
+
+.btn-warning {
+    background: var(--warning-color);
+    color: #000;
+}
+
+.btn-info {
+    background: #17a2b8;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.btn-outline:hover {
+    background: var(--background-color);
+    border-color: var(--text-secondary);
+}
+
+.btn-outline-secondary {
+    background: transparent;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+}
+
+.btn-outline-secondary:hover {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.btn-outline-danger {
+    background: transparent;
+    border: 1px solid var(--danger-color);
+    color: var(--danger-color);
+}
+
+.btn-outline-danger:hover {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-outline-info {
+    background: transparent;
+    border: 1px solid #17a2b8;
+    color: #17a2b8;
+}
+
+.btn-outline-info:hover {
+    background: #17a2b8;
+    color: white;
+}
+
+.btn-outline-success {
+    background: transparent;
+    border: 1px solid var(--success-color);
+    color: var(--success-color);
+}
+
+.btn-outline-success:hover {
+    background: var(--success-color);
+    color: white;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+.btn-lg {
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+}
+
+/* アラート */
+.alert {
+    padding: 1rem 1.5rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    position: relative;
+}
+
+.alert-success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.alert-error,
+.alert-danger {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.alert-warning {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.alert-info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+.alert-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.75rem; /* Increased padding for better touch target (44x44px minimum) */
+  margin-left: auto;
+  color: inherit;
+  line-height: 1;
+  opacity: 0.7;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  /* Modern transparent background */
+  background-color: transparent;
+  color: var(--text-secondary);
+  position: relative;
+  overflow: hidden;
+  /* Subtle border for definition */
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  /* Modern glassmorphism effect */
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  /* Subtle shadow for depth */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Tooltip */
+.alert-close::before {
+  content: attr(aria-label);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 0.375rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  /* Modern tooltip with subtle gradient */
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.alert-close:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+body.dark-mode .alert-close::before {
+  background: rgba(255, 255, 255, 0.9);
+  color: #14171a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  /* Modern tooltip with subtle gradient */
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Dark mode adjustments */
+body.dark-mode .alert-close {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.alert-close:hover {
+  opacity: 1;
+  transform: scale(1.15) rotate(0deg);
+  background-color: rgba(128, 128, 128, 0.15);
+  color: var(--text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  /* Enhanced glassmorphism on hover */
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  /* Subtle border glow */
+  border-color: rgba(128, 128, 128, 0.4);
+}
+
+body.dark-mode .alert-close:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 20px rgba(255, 255, 255, 0.1);
+  /* Enhanced glassmorphism on hover */
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  /* Subtle border glow */
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Ripple effect on click */
+.alert-close::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(128, 128, 128, 0.4) 0%, transparent 70%);
+  transform: translate(-50%, -50%) scale(0);
+  border-radius: 50%;
+  opacity: 0;
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease-out;
+  pointer-events: none;
+  /* Modern ripple with blur */
+  filter: blur(1px);
+}
+
+.alert-close:active::after {
+  transform: translate(-50%, -50%) scale(2.5);
+  opacity: 1;
+  transition: transform 0s, opacity 0s;
+}
+
+body.dark-mode .alert-close::after {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+  filter: blur(1px);
+}
+
+.alert-close:active {
+  transform: scale(0.85) rotate(-5deg);
+  opacity: 0.8;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease;
+}
+
+/* Hover animation with subtle rotation */
+.alert-close:hover svg {
+  transform: rotate(90deg) scale(1.15);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Modern subtle animation */
+  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.2));
+}
+
+.alert-close:active svg {
+  transform: rotate(0deg) scale(0.9);
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Ensure SVG icon scales properly */
+.alert-close svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Modern icon styling */
+  shape-rendering: geometricPrecision;
+}
+
+/* Dark mode SVG color adjustment */
+body.dark-mode .alert-close svg {
+  stroke: var(--text-secondary);
+}
+
+.alert-close:hover svg {
+  stroke: var(--text-primary);
+  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.25));
+}
+
+body.dark-mode .alert-close:hover svg {
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.25));
+}
+
+/* Click animation - fade out effect */
+.alert-close:active {
+  animation: closeClick 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes closeClick {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(0.85) rotate(-10deg);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(0.7) rotate(-15deg);
+    opacity: 0;
+  }
+}
+
+@keyframes closeClick {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+}
+
+/* Swipe gesture for mobile dismiss */
+.alert {
+touch-action: pan-y;
+transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.alert.swiping-left {
+transform: translateX(-100%);
+opacity: 0;
+}
+
+/* カード */
+.card {
+    background: var(--surface-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.card-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+.card-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    background: var(--background-color);
+}
+
+/* レスポンシブ */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 15px;
+    }
+    
+    .btn {
+        padding: 0.625rem 1.25rem;
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+    
+    .btn-sm {
+        min-height: 44px;
+        padding: 0.375rem 0.75rem;
+    }
+    
+    .btn-lg {
+        min-height: 52px;
+        padding: 0.875rem 1.5rem;
+    }
+    
+    /* フォーム要素の最適化 */
+    .form-control {
+        min-height: 44px;
+        padding: 0.75rem;
+        font-size: 16px; /* iOSでズーム 방지 */
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        border-radius: 8px;
+    }
+    
+    textarea.form-control {
+        min-height: 100px;
+    }
+    
+    select.form-control {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23657786' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 36px;
+    }
+    
+    /* チェックボックスとラジオボタン */
+    input[type="checkbox"],
+    input[type="radio"] {
+        min-width: 22px;
+        min-height: 22px;
+        -webkit-tap-highlight-color: transparent;
+    }
+    
+    /* タップ時のフィードバック */
+    button,
+    .btn,
+    input,
+    select,
+    textarea {
+        -webkit-tap-highlight-color: rgba(29, 161, 242, 0.1);
+    }
+    
+    /* アラート */
+    .alert {
+        padding: 0.875rem 1rem;
+        font-size: 0.9rem;
+    }
+    
+    /* カード */
+    .card {
+        border-radius: 8px;
+    }
+    
+    .card-header {
+        padding: 0.875rem 1rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    /* リンクのタップ領域拡大 */
+    a {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+    }
+    
+    /* フォーカス状態の改善 */
+    .btn:focus,
+    .form-control:focus {
+        box-shadow: 0 0 0 3px rgba(29, 161, 242, 0.25);
+    }
+}
+
+/*  超小型画面 */
+@media (max-width: 375px) {
+    .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* アカウント未登録警告ボタン */
+.alert-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.btn-block-mobile {
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+}
+
+/* モバイル用アラート */
+@media (max-width: 480px) {
+    .alert {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        text-align: left;
+    }
+    
+    .alert i {
+        align-self: flex-start;
+    }
+    
+    .alert .alert-body {
+        width: 100%;
+    }
+    
+    .alert .alert-content {
+        line-height: 1.5;
+        word-break: break-word;
+    }
+    
+    .btn-block-mobile {
+        width: 100%;
+        padding: 0.875rem 1rem;
+    }
+}

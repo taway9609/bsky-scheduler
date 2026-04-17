@@ -1,0 +1,7 @@
+/* Bluesky base styles */
+
+:root {
+    --bsky-blue: #0085FF;
+    --bsky-blue-hover: #0066CC;
+    --card-background: var(--surface-color, #ffffff);
+}

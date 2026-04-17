@@ -1,0 +1,318 @@
+<!-- 投稿作成セクション -->
+<section id="create-section" class="content-section">
+
+<!-- jQueryイベントハンドラ -->
+<script src="{{ url_for('static', filename='js/bluesky/event-handlers.js') }}"></script>
+
+    <div class="section-header mb-4">
+        <h2>新規投稿作成</h2>
+    </div>
+
+    <!-- アカウント未登録時の警告メッセージ -->
+    <div id="no-account-warning" class="alert alert-warning" style="display: none;">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div class="alert-body">
+            <span class="alert-content">
+                投稿するにはアカウント登録が必要です。<br>
+                アカウント管理画面から追加してください。
+            </span>
+            <button class="btn btn-primary btn-block-mobile" id="switch-to-account-btn">
+                <i class="fas fa-plus"></i> アカウントを追加
+            </button>
+        </div>
+    </div>
+
+    <!-- 投稿フォーム（アカウント未登録時は無効化） -->
+    <div id="create-form-container" style="opacity: 1; transition: opacity 0.3s;">
+    <form id="post-form" class="post-form" method="POST" action="{{ url_for('bluesky.schedule_post') }}" enctype="multipart/form-data">
+        <!-- アカウント選択（投稿作成用） -->
+        <input type="hidden" id="reply-to-post-id" name="reply_to_post_id">
+        <input type="hidden" id="external-reply-uri" name="external_reply_uri">
+        <input type="hidden" id="external-reply-cid" name="external_reply_cid">
+        <input type="hidden" id="is_quote" name="is_quote" value="0">
+        <div id="reply-info-area" class="reply-info-area" style="display: none;">
+            <h4><i class="fas fa-reply"></i> 返信先:</h4>
+            <p><strong>アカウント:</strong> <span id="reply-to-parent-account"></span></p>
+            <p id="reply-to-content-preview"></p>
+            <div id="reply-to-parent-image-preview" class="reply-parent-image-container">
+                <!-- 親投稿の画像がここに表示されます -->
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="cancel-reply-btn">返信を取り消す</button>
+        </div>
+        <div class="form-group">
+            <label for="account-select">投稿アカウント</label>
+            <div class="select-wrapper">
+                <select id="account-select" name="account" class="form-control" required>
+                    {% if accounts %}
+                        <option value="">アカウントを選択してください</option>
+                        {% for acc_username, account_data in accounts.items() %}
+                            <option value="{{ acc_username }}"
+                                    data-did="{{ account_data.did }}"
+                                    data-username="{{ account_data.username }}"
+                                    data-handle="{{ account_data.handle }}"
+                                    data-display-name="{{ account_data.display_name or '' }}"
+                                    {% if acc_username == username %}selected{% endif %}>
+                                {% if account_data.display_name %}
+                                    {{ account_data.display_name }} (@{{ acc_username }})
+                                {% else %}
+                                    @{{ acc_username }}
+                                {% endif %}
+                            </option>
+                        {% endfor %}
+                    {% else %}
+                        <option disabled>アカウントがありません</option>
+                    {% endif %}
+                </select>
+            </div>
+            <div class="selected-account-preview" id="selected-account-preview" style="display: none;">
+                <div class="account-info">
+                    <div class="account-avatar">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <div class="account-details">
+                        <span class="account-name"></span>
+                        <span class="account-handle text-muted"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="post-content">投稿内容</label>
+            <textarea id="post-content" name="content" placeholder="投稿内容を入力してください..." rows="4"></textarea>
+            <div class="char-count">0 / 300</div>
+            <div id="hashtag-history-container" class="hashtag-history" style="display: none;">
+                <div class="hashtag-history-header">
+                    <span class="hashtag-history-title">最近のタグ:</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="clear-hashtag-history-btn" title="履歴をクリア">
+                        <i class="fas fa-trash"></i> クリア
+                    </button>
+                </div>
+                <div class="hashtag-history-items"></div>
+            </div>
+        </div>
+
+        <!-- URL 引用機能 -->
+        <div class="form-group">
+            <label>投稿を引用</label>
+            <div class="url-attach-container">
+                <div class="url-input-group">
+                    <input type="text" id="quote-url-input" class="form-control" placeholder="Bluesky 投稿の URL を貼り付けて「引用追加」をクリック">
+                    <button type="button" class="btn btn-outline-primary" id="add-quote-url-btn">
+                        <i class="fas fa-link"></i> 引用追加
+                    </button>
+                </div>
+                <small class="form-text text-muted">
+                    URL から投稿を参照して返信/引用できます。例: https://bsky.app/profile/user.bsky.social/post/123456
+                </small>
+            </div>
+            <!-- 引用先の処理モード選択（返信か引用か） -->
+            <div id="quote-mode-selector" class="mt-2" style="display: none;">
+                <label>引用先の扱い:</label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="quote_mode" id="quote-mode-reply" value="reply" checked>
+                    <label class="form-check-label" for="quote-mode-reply">返信する</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="quote_mode" id="quote-mode-quote" value="quote">
+                    <label class="form-check-label" for="quote-mode-quote">引用する</label>
+                </div>
+                <small class="form-text text-muted d-block">
+                    返信: 元の投稿への返信になります。<br>
+                    引用: 元の投稿を引用して自分の投稿を作成します（返信にはなりません）。
+                </small>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="language">言語</label>
+            <select id="language" name="post_langs" class="form-control">
+                <option value="ja">日本語</option>
+                <option value="en">English</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="schedule_time">予約日時</label>
+            <input type="datetime-local" id="schedule_time" name="schedule_time" class="form-control" required>
+            
+            <div class="mt-2 selected-datetime-display">
+                <small class="form-text text-primary">
+                    <i class="fas fa-info-circle"></i> 選択中：<span id="selected-datetime-text" class="fw-bold">-</span>
+                </small>
+            </div>
+        </div>
+
+        <div class="preset-buttons-row">
+            <div class="preset-buttons-column">
+                <div class="schedule-time-presets">
+                    <small class="form-text text-muted d-block mb-1">
+                        <i class="fas fa-clock"></i> プリセット時間:
+                    </small>
+                    <div class="preset-buttons-grid" id="preset-time-buttons">
+                        <!-- JavaScript で動的に生成 -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="preset-buttons-column">
+                <div class="schedule-day-presets">
+                    <small class="form-text text-muted d-block mb-1">
+                        <i class="fas fa-calendar-alt"></i> 日付調整:
+                    </small>
+                    <div class="preset-day-buttons">
+                        <button type="button" class="btn btn-sm btn-outline-danger preset-day-btn" data-day-offset="-1" title="昨日">
+                            <i class="fas fa-angle-left"></i> -1 日
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info preset-day-btn" data-day-offset="0" title="今日">
+                            <i class="fas fa-calendar-day"></i> 今日
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success preset-day-btn" data-day-offset="1" title="明日">
+                            +1 日 <i class="fas fa-angle-right"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger preset-day-btn" data-day-offset="-2" title="2 日前">
+                            <i class="fas fa-angle-double-left"></i> -2 日
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success preset-day-btn" data-day-offset="2" title="明後日">
+                            +2 日 <i class="fas fa-angle-double-right"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success preset-day-btn" data-day-offset="7" title="1 週間後">
+                            +1 週間 <i class="fas fa-week"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 画像アップロード -->
+        <div class="form-group">
+            <label for="images">画像 (オプション，最大 4 枚まで)</label>
+            <div class="image-upload-container">
+                <input type="file" id="images" name="images" multiple accept="image/*" style="display: none;">
+                <div class="file-upload" id="file-upload-area">
+                    <div class="file-upload-text">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <span>画像をドラッグ&ドロップまたはクリックして選択</span>
+                        <small>最大 4 枚まで（大きな画像は自動的に圧縮されます）</small>
+                    </div>
+                </div>
+
+                <!-- 画像プレビューエリア -->
+                <div class="image-preview-container" id="image-preview-container">
+                    <div class="image-grid" id="image-grid"></div>
+                    <div class="image-controls">
+                        <button type="button" class="btn btn-sm btn-secondary" id="add-more-images">
+                            <i class="fas fa-plus"></i> 画像を追加
+                        </button>
+                        <button type="button" class="btn btn-sm btn-danger" id="clear-all-images" style="display: none;">
+                            <i class="fas fa-trash"></i> すべてクリア
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 返信制限オプション -->
+        <div class="form-group">
+            <label>返信できるユーザー</label>
+            <div id="reply_gate_options" class="label-options">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="reply_gate" value="nobody">
+                    <span class="checkmark"></span>
+                    返信を無効にする
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="reply_gate" value="following">
+                    <span class="checkmark"></span>
+                    フォローしているアカウント
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="reply_gate" value="mentioned">
+                    <span class="checkmark"></span>
+                    メンションしたアカウント
+                </label>
+            </div>
+            <small class="form-text text-muted">投稿に返信できるユーザーを制限します。</small>
+        </div>
+
+        <div class="form-group">
+            <div class="label-options">
+                 <label class="checkbox-label">
+                    <input type="checkbox" id="disable_quotes" name="disable_quotes">
+                    <span class="checkmark"></span>
+                    引用を無効にする
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>ラベル (オプション)</label>
+            <div class="label-options">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="labels" value="sexual">
+                    <span class="checkmark"></span>
+                    示唆的
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="labels" value="nudity">
+                    <span class="checkmark"></span>
+                    ヌード
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="labels" value="porn">
+                    <span class="checkmark"></span>
+                    性的コンテンツ
+                </label>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="button" class="btn btn-secondary" id="reset-form-btn">
+                <i class="fas fa-undo"></i>
+                リセット
+            </button>
+            <button type="button" class="btn btn-warning" id="cancel-edit-btn" style="display: none;">
+                <i class="fas fa-times-circle"></i>
+                編集をキャンセル
+            </button>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-calendar-plus"></i>
+                投稿を予約
+            </button>
+        </div>
+
+        <!-- 画像順序保存用の隠しフィールド（動的に生成） -->
+        <div id="image-order-inputs"></div>
+    </form>
+    </div><!-- /create-form-container -->
+
+    <!-- ALT テキスト入力モーダル -->
+    <div id="alt-text-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>ALT テキストを入力</h3>
+                <button class="modal-close" id="close-alt-text-modal-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="alt-text-form">
+                    <input type="hidden" id="alt-text-image-id">
+                    <div class="form-group">
+                        <label for="alt-text-input">画像の説明（ALT テキスト）</label>
+                        <textarea id="alt-text-input" rows="4" placeholder="この画像の説明を入力してください（例：夕焼けのビーチで遊ぶ犬）"></textarea>
+                        <small class="form-text text-muted">視覚障がいのある方や、画像が表示されない環境のために画像の内容を説明します。</small>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-alt-text-btn">
+                            キャンセル
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> 保存
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>

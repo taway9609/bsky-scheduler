@@ -1,0 +1,129 @@
+/* Register page styles - extends auth.css */
+
+.register-card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    max-width: 420px;
+    width: 100%;
+}
+
+.register-header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #f0f0f0;
+    padding: 2rem;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.register-header h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #e8e8e8;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.register-header i {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+    color: #f8f8f8;
+}
+
+.register-header p {
+    color: rgba(240, 240, 240, 0.9);
+}
+
+.register-body {
+    padding: 2rem;
+    color: var(--card-text);
+}
+
+.btn-register {
+    background: linear-gradient(135deg, var(--bsky-blue) 0%, #00a8e8 100%);
+    border: none;
+    color: white;
+    font-weight: 600;
+    padding: 0.75rem;
+    border-radius: 8px;
+}
+
+.btn-register:hover {
+    background: linear-gradient(135deg, var(--bsky-blue-hover) 0%, var(--bsky-blue) 100%);
+    color: white;
+}
+
+.password-requirements {
+    font-size: 0.85rem;
+    color: #8b949e;
+    margin-top: 0.5rem;
+}
+
+.login-link {
+    text-align: center;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--divider);
+}
+
+.login-link p {
+    color: var(--card-text);
+}
+
+.success-message {
+    background: #1f3d1f;
+    border: 1px solid #2c6b2c;
+    color: #6bff6b;
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    display: none;
+}
+
+.success-message.show {
+    display: block;
+}
+
+.disabled-overlay {
+    background: #2d2d2d;
+    border: 1px solid #6b2c2c;
+    color: #ff9999;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.disabled-overlay i {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .form-control {
+        min-height: 44px;
+        font-size: 16px;
+        padding: 0.75rem;
+    }
+    .input-group-text {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.75rem;
+    }
+    .btn-register {
+        min-height: 44px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .register-body {
+        padding: 1.5rem;
+    }
+    .input-group .form-control {
+        min-height: 44px;
+    }
+}

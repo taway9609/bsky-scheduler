@@ -1,0 +1,11 @@
+# Production test override — safe mock-enabled testing of production config
+# Usage: docker compose -f docker-compose.yml -f docker-compose.test-prod.yml up -d --build app
+
+services:
+  app:
+    environment:
+      SECRET_KEY: "test-secret-key-for-production-validation-only"
+      ENCRYPTION_KEY: "test-encryption-key-for-production-validation-only"
+      USE_MOCK_BLUESKY: "true"
+    ports:
+      - "6970:6969"
